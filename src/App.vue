@@ -8,6 +8,7 @@ const store = useSchemeStore()
 const nav = [
   { name: 'overview', label: '方案总览' },
   { name: 'map', label: '地图与阶段' },
+  { name: 'capacity', label: '半小时容量账' },
   { name: 'review', label: '多单位会签' },
 ]
 </script>
@@ -24,7 +25,7 @@ const nav = [
     <a-layout>
       <a-layout-header class="topbar">
         <div><b>{{ store.scheme.id }}</b><span>{{ store.scheme.area }} · 2026 年第四季度施工计划</span></div>
-        <div class="top-actions"><a-tag color="green">协同在线 11</a-tag><a-button :disabled="!store.dirty" @click="store.undo">撤销修改</a-button><a-button type="primary">发起阶段审批</a-button></div>
+        <div class="top-actions"><a-tag :color="store.gate.ready ? 'green' : 'red'">{{ store.gate.ready ? '容量账平衡' : `导出被挡 · ${store.gate.reasons.length} 项` }}</a-tag><a-tag color="green">协同在线 11</a-tag><a-button :disabled="!store.dirty" @click="store.undo">撤销修改</a-button><a-button type="primary" @click="$router.push('/capacity')">容量账与占位</a-button></div>
       </a-layout-header>
       <a-layout-content class="main"><router-view /></a-layout-content>
     </a-layout>
