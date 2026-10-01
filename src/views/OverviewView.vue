@@ -3,8 +3,11 @@ import { computed } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { SCHEME_QUERY } from '../graphql'
 import { useSchemeStore } from '../store/scheme'
+import { useCapacityStore } from '../store/capacity'
+import { Modal } from '@arco-design/web-vue'
 
 const store = useSchemeStore()
+const cap = useCapacityStore()
 const { result, loading, error } = useQuery(SCHEME_QUERY)
 const stats = computed(() => [
   { label: '施工阶段', value: store.scheme.stages.length, note: '跨 42 天' },
@@ -12,13 +15,29 @@ const stats = computed(() => [
   { label: '待处理条件', value: store.scheme.comments.filter((item) => item.status === '待处理').length, note: '公交单位尚有 1 条' },
   { label: '方案版本', value: `v${result.value?.scheme?.version ?? store.scheme.version}`, note: '每次几何修改留痕' },
 ])
+const capStats = computed(() => [
+  { label: '已预占窗口', value: new Set(cap.validOccupations.map((o) => o.windowId)).size },
+  { label: '排队中', value: cap.queuedEntries.length },
+  { label: '容量预警窗口', value: cap.windows.filter((w) => cap.windowStatus(w) === '紧张' || cap.windowStatus(w) === '排队').length },
+])
+function previewNotice() {
+  if (cap.exportBlocked) {
+    Modal.warning({ title: '容量账重算中，通告导出已锁定', content: '阶段时间或路线变更后旧预占与会签正在失效重算，恢复前不得导出。', okText: '知道了' })
+    return
+  }
+  Modal.info({ title: '公开通告预览', content: '通告包将包含施工阶段、绕行建议与容量预警（排队/占用来源），确认后可在「多单位会签」页导出。', okText: '知道了' })
+}
 </script>
 
 <template>
-  <section class="page-head"><div><p class="eyebrow">建设 · 交通 · 公交 · 应急</p><h1>封路方案协调总览</h1><p>在同一地图与阶段计划下核验相邻工程、生命通道、公交覆盖与绕行时延。</p></div><a-space><a-button>公开通告预览</a-button><a-button type="primary" @click="$router.push('/map')">编辑封路方案</a-button></a-space></section>
+  <section class="page-head"><div><p class="eyebrow">建设 · 交通 · 公交 · 应急</p><h1>封路方案协调总览</h1><p>在同一地图与阶段计划下核验相邻工程、生命通道、公交覆盖与绕行时延。</p></div><a-space><a-button @click="previewNotice">公开通告预览</a-button><a-button type="primary" @click="$router.push('/map')">编辑封路方案</a-button></a-space></section>
   <a-spin :loading="loading" style="width:100%">
     <a-alert v-if="error" type="error" title="GraphQL 请求异常，已使用本地草案" class="mb16" />
+    <a-alert v-if="cap.exportBlocked" type="error" class="mb16" title="容量账重算中，通告导出已锁定" content="阶段时间或路线变更后，旧预占与会签正在失效重算；恢复前公开通告导出挡住。" />
     <div class="metrics"><article v-for="item in stats" :key="item.label" class="card metric"><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.note }}</small></article></div>
+    <div class="metrics cap-metrics">
+      <article v-for="item in capStats" :key="item.label" class="card metric cap"><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small><a @click="$router.push('/capacity')">进入容量账 →</a></small></article>
+    </div>
     <div class="grid-2">
       <article class="card">
         <div class="panel-head"><div><h2>施工阶段时间轴</h2><p>点击阶段查看范围与道路占用</p></div><a-tag color="orange">42 天计划</a-tag></div>
@@ -35,6 +54,6 @@ const stats = computed(() => [
 </template>
 
 <style scoped>
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.metric{padding:17px;border-left:4px solid #2563eb}.metric span,.metric small{display:block;color:#667085}.metric strong{display:block;font-size:29px;margin:7px 0 2px}.grid-2{display:grid;grid-template-columns:1.4fr .8fr;gap:16px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}.panel-head h2{font-size:17px;margin:0 0 4px}.panel-head p{color:#7a8798;font-size:13px;margin:0}.conflict{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px;margin-bottom:9px;border-radius:6px}.conflict.red{background:#fff1f2;border-left:3px solid #e11d48}.conflict.amber{background:#fff7ed;border-left:3px solid #f59e0b}.conflict>div{min-width:210px}.conflict b,.conflict small{display:block}.conflict small{color:#7a8798;margin-top:3px}.conflict p{width:100%;margin:0;color:#475569}.mt16{margin-top:16px}.agency-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.agency{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #e7ebf1;border-radius:7px}.agency>span{display:grid;place-items:center;width:35px;height:35px;border-radius:7px;background:#eff6ff;color:#2563eb;font-weight:800}.agency b,.agency small{display:block}.agency small{color:#7a8798;margin-top:3px}.agency>div{flex:1}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.cap-metrics{grid-template-columns:repeat(3,1fr)}.metric{padding:17px;border-left:4px solid #2563eb}.metric.cap{border-left-color:#0ea5e9}.metric span,.metric small{display:block;color:#667085}.metric strong{display:block;font-size:29px;margin:7px 0 2px}.metric small a{color:#2563eb;cursor:pointer}.grid-2{display:grid;grid-template-columns:1.4fr .8fr;gap:16px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}.panel-head h2{font-size:17px;margin:0 0 4px}.panel-head p{color:#7a8798;font-size:13px;margin:0}.conflict{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px;margin-bottom:9px;border-radius:6px}.conflict.red{background:#fff1f2;border-left:3px solid #e11d48}.conflict.amber{background:#fff7ed;border-left:3px solid #f59e0b}.conflict>div{min-width:210px}.conflict b,.conflict small{display:block}.conflict small{color:#7a8798;margin-top:3px}.conflict p{width:100%;margin:0;color:#475569}.mt16{margin-top:16px}.agency-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.agency{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #e7ebf1;border-radius:7px}.agency>span{display:grid;place-items:center;width:35px;height:35px;border-radius:7px;background:#eff6ff;color:#2563eb;font-weight:800}.agency b,.agency small{display:block}.agency small{color:#7a8798;margin-top:3px}.agency>div{flex:1}
 @media(max-width:1050px){.metrics,.agency-grid{grid-template-columns:1fr 1fr}.grid-2{grid-template-columns:1fr}}@media(max-width:600px){.metrics,.agency-grid{grid-template-columns:1fr}}
 </style>

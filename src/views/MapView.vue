@@ -2,11 +2,26 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl'
 import { useSchemeStore } from '../store/scheme'
+import { useCapacityStore } from '../store/capacity'
+import type { ClosureStage } from '../types'
 
 const store = useSchemeStore()
+const cap = useCapacityStore()
 const mapEl = ref<HTMLDivElement>()
 let map: MapLibreMap | undefined
 const layers = ref({ closure: true, detour: true, ambulance: true, bus: true, adjacent: true })
+
+// 阶段时间或路线一变，旧预占和对应会签失效重算
+function patchStage(patch: Partial<ClosureStage>) {
+  const stageId = store.selectedStageId
+  store.updateStage(patch)
+  if (patch.start || patch.end || patch.lanes) cap.invalidateStage(stageId)
+}
+function finishDraw() {
+  const stageId = store.selectedStageId
+  store.finishDraw()
+  cap.invalidateStage(stageId)
+}
 
 function addGeoSource(id: string, coordinates: [number, number][], color: string, dasharray?: number[]) {
   if (!map?.isStyleLoaded()) return
@@ -51,16 +66,16 @@ watch(layers, () => {
 </script>
 
 <template>
-  <section class="page-head compact"><div><p class="eyebrow">几何与时间联动</p><h1>封路范围与阶段地图</h1><p>选择阶段后在地图上点击绘制路线；每次几何修改都会生成版本，审批意见锚定对应路段。</p></div><a-space><a-button @click="store.startDraw" :status="store.drawing ? 'danger' : undefined">{{ store.drawing ? `绘制中 · 已点 ${store.draftRoute.length} 个` : '绘制封路路线' }}</a-button><a-button :disabled="!store.drawing" type="primary" @click="store.finishDraw">完成绘制</a-button><a-button @click="fit">定位全段</a-button></a-space></section>
+  <section class="page-head compact"><div><p class="eyebrow">几何与时间联动</p><h1>封路范围与阶段地图</h1><p>选择阶段后在地图上点击绘制路线；每次几何修改都会生成版本，审批意见锚定对应路段。</p></div><a-space><a-button @click="store.startDraw" :status="store.drawing ? 'danger' : undefined">{{ store.drawing ? `绘制中 · 已点 ${store.draftRoute.length} 个` : '绘制封路路线' }}</a-button><a-button :disabled="!store.drawing" type="primary" @click="finishDraw">完成绘制</a-button><a-button @click="fit">定位全段</a-button></a-space></section>
   <div class="toolbar card"><a-radio-group v-model="store.selectedStageId" type="button"><a-radio v-for="stage in store.scheme.stages" :key="stage.id" :value="stage.id">{{ stage.id }}</a-radio></a-radio-group><span class="spacer"></span><a-checkbox v-model="layers.closure">封路</a-checkbox><a-checkbox v-model="layers.detour">绕行</a-checkbox><a-checkbox v-model="layers.ambulance">救护通道</a-checkbox><a-checkbox v-model="layers.bus">公交</a-checkbox><a-checkbox v-model="layers.adjacent">相邻工程</a-checkbox></div>
   <div class="map-grid">
     <div ref="mapEl" class="map"></div>
     <aside class="card inspector">
       <div class="panel-head"><div><h2>{{ store.selectedStage?.name }}</h2><p>{{ store.selectedStage?.start }} → {{ store.selectedStage?.end }}</p></div><a-tag :color="store.selectedStage?.status === '退回' ? 'red' : 'orange'">{{ store.selectedStage?.status }}</a-tag></div>
       <a-form layout="vertical" :model="store.selectedStage || {}">
-        <a-form-item label="车道占用"><a-input :model-value="store.selectedStage?.lanes" @change="(value: string) => store.updateStage({ lanes: value })" /></a-form-item>
+        <a-form-item label="车道占用"><a-input :model-value="store.selectedStage?.lanes" @change="(value: string) => patchStage({ lanes: value })" /></a-form-item>
         <a-form-item label="阶段名称"><a-input :model-value="store.selectedStage?.name" @change="(value: string) => store.updateStage({ name: value })" /></a-form-item>
-        <div class="two"><a-form-item label="开始"><a-date-picker :model-value="store.selectedStage?.start" @change="(value: any) => store.updateStage({ start: value })" /></a-form-item><a-form-item label="结束"><a-date-picker :model-value="store.selectedStage?.end" @change="(value: any) => store.updateStage({ end: value })" /></a-form-item></div>
+        <div class="two"><a-form-item label="开始"><a-date-picker :model-value="store.selectedStage?.start" @change="(value: any) => patchStage({ start: value })" /></a-form-item><a-form-item label="结束"><a-date-picker :model-value="store.selectedStage?.end" @change="(value: any) => patchStage({ end: value })" /></a-form-item></div>
       </a-form>
       <h3>绕行比较</h3>
       <div v-for="route in store.scheme.detours" :key="route.id" class="detour"><div><b>{{ route.name }}</b><small>{{ route.distance }} km · 增加 {{ route.extraMinutes }} 分钟</small></div><a-tag :color="route.extraMinutes > 10 ? 'orange' : 'green'">{{ route.extraMinutes > 10 ? '关注' : '可用' }}</a-tag></div>

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
 import { useSchemeStore } from './store/scheme'
+import { useCapacityStore } from './store/capacity'
 
 const route = useRoute()
 const router = useRouter()
 const store = useSchemeStore()
+const cap = useCapacityStore()
 const nav = [
   { name: 'overview', label: '方案总览' },
   { name: 'map', label: '地图与阶段' },
+  { name: 'capacity', label: '容量账' },
   { name: 'review', label: '多单位会签' },
 ]
 </script>
@@ -26,7 +29,14 @@ const nav = [
         <div><b>{{ store.scheme.id }}</b><span>{{ store.scheme.area }} · 2026 年第四季度施工计划</span></div>
         <div class="top-actions"><a-tag color="green">协同在线 11</a-tag><a-button :disabled="!store.dirty" @click="store.undo">撤销修改</a-button><a-button type="primary">发起阶段审批</a-button></div>
       </a-layout-header>
-      <a-layout-content class="main"><router-view /></a-layout-content>
+      <a-layout-content class="main">
+        <a-alert v-if="cap.exportBlocked" type="error" class="recalc-banner" title="容量账重算中：阶段时间或路线变更，旧预占与会签已失效，恢复前通告导出锁定" />
+        <router-view />
+      </a-layout-content>
     </a-layout>
   </a-layout>
 </template>
+
+<style scoped>
+.recalc-banner{margin-bottom:14px}
+</style>
